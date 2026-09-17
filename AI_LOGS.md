@@ -6,6 +6,18 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+if the rescheduling is done for the conflict int the time show flag or dont reschedule it 
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Implemented strict conflict flag enforcement and blocking for appointment rescheduling:
+- **Server Enforcement (`server.js`)**: `PUT /api/appointments/:id/reschedule` checks `checkConflictInternal(doctorId, date, startTime, endTime, excludeId)`. If an overlap or invalid/past time is detected, returns HTTP 409 `{ error, conflict: true }` and blocks database update.
+- **UI Real-Time Alert Banner (`index.html` & `app.js`)**: Added `#reschedule-conflict-alert` inside `#modal-reschedule-appointment`. Real-time validation highlights conflicts as date/times are changed, displays a red conflict alert banner (`🚨 Double-Booking / Conflict Detected!`), and disables the "Save Reschedule" button.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 dont let me book for previous days or previous time 
 </USER_REQUEST>
 

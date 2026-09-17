@@ -941,6 +941,11 @@ class ClinicApp {
     document.getElementById('btn-close-reschedule-modal')?.addEventListener('click', () => rModal.classList.add('hidden'));
     document.getElementById('btn-abort-reschedule')?.addEventListener('click', () => rModal.classList.add('hidden'));
 
+    const triggerRescheduleValidation = () => this.validateRescheduleOverlap();
+    document.getElementById('reschedule-date')?.addEventListener('change', triggerRescheduleValidation);
+    document.getElementById('reschedule-start')?.addEventListener('input', triggerRescheduleValidation);
+    document.getElementById('reschedule-end')?.addEventListener('input', triggerRescheduleValidation);
+
     document.getElementById('form-reschedule-appointment')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = document.getElementById('reschedule-appt-id').value;
@@ -950,7 +955,10 @@ class ClinicApp {
 
       const res = await this.apiRequest(`/api/appointments/${id}/reschedule`, 'PUT', { date, startTime, endTime });
       if (res && res.error) {
-        this.showToast(`Reschedule failed: ${res.error}`, 'error');
+        document.getElementById('reschedule-conflict-alert')?.classList.remove('hidden');
+        document.getElementById('reschedule-conflict-desc').textContent = res.error;
+        document.getElementById('btn-confirm-reschedule').disabled = true;
+        this.showToast(`Reschedule blocked: ${res.error}`, 'error');
       } else {
         this.showToast('Appointment rescheduled successfully! Conflict check verified.', 'success');
         rModal.classList.add('hidden');
@@ -1154,13 +1162,53 @@ Payment Status: CLEARED & PAID (SUCCESS)
   }
 
   openRescheduleModal(appointment) {
+    this.currentRescheduleAppt = appointment;
     const rModal = document.getElementById('modal-reschedule-appointment');
     document.getElementById('reschedule-appt-id').value = appointment.id;
     document.getElementById('reschedule-info-text').textContent = `Patient: ${appointment.patientName} | Doctor: ${appointment.doctorName}`;
     document.getElementById('reschedule-date').value = appointment.date || this.selectedDate;
     document.getElementById('reschedule-start').value = appointment.startTime || '10:00';
     document.getElementById('reschedule-end').value = appointment.endTime || '10:30';
+    
+    document.getElementById('reschedule-conflict-alert')?.classList.add('hidden');
+    document.getElementById('btn-confirm-reschedule').disabled = false;
+    
     rModal.classList.remove('hidden');
+    this.validateRescheduleOverlap();
+  }
+
+  async validateRescheduleOverlap() {
+    if (!this.currentRescheduleAppt) return;
+    const id = this.currentRescheduleAppt.id;
+    const doctorId = this.currentRescheduleAppt.doctorId;
+    const date = document.getElementById('reschedule-date').value;
+    const startTime = document.getElementById('reschedule-start').value;
+    const endTime = document.getElementById('reschedule-end').value;
+    const submitBtn = document.getElementById('btn-confirm-reschedule');
+
+    const alertBox = document.getElementById('reschedule-conflict-alert');
+    const desc = document.getElementById('reschedule-conflict-desc');
+
+    if (!date || !startTime || !endTime) {
+      alertBox?.classList.add('hidden');
+      if (submitBtn) submitBtn.disabled = true;
+      return;
+    }
+
+    const apiConflict = await this.apiRequest('/api/appointments/check-conflict', 'POST', {
+      doctorId, date, startTime, endTime, excludeId: id
+    });
+
+    const evaluation = apiConflict || checkBookingConflict(doctorId, date, startTime, endTime, id);
+
+    if (evaluation.hasConflict) {
+      if (alertBox) alertBox.classList.remove('hidden');
+      if (desc) desc.textContent = evaluation.reason;
+      if (submitBtn) submitBtn.disabled = true;
+    } else {
+      if (alertBox) alertBox.classList.add('hidden');
+      if (submitBtn) submitBtn.disabled = false;
+    }
   }
 
   showToast(message, type = 'success') {
