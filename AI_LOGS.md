@@ -6,6 +6,20 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+implement it and also add whenever the patient arrives the history of the patients are also shown when they arrived were they late and is the appointment still going on or not make it real time working for the receiptionist use as less tokens as possible
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Implemented 10:00 AM Automated Scheduler & Real-Time Patient Arrival Tracking:
+- **10:00 AM Automated Reminder Engine (`server.js`)**: Runs background timer + endpoint `POST /api/schedule/run-10am-reminders` to send morning appointment alerts to `outbox`.
+- **Patient Arrival Check-In (`POST /api/appointments/:id/check-in`)**: Marks patient arrived, calculates `ON_TIME` vs `LATE (X mins late)`, and sets status to `IN_PROGRESS`.
+- **Visit Completion (`POST /api/appointments/:id/complete`)**: Updates consultation status to `COMPLETED`.
+- **Punctuality & History Summary (`GET /api/patients/:id/history`)**: Computes total visits, on-time count, late count, no-show count, and punctuality score (%). Displays live badges on receptionist schedule cards.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 if the rescheduling is done for the conflict int the time show flag or dont reschedule it 
 </USER_REQUEST>
 

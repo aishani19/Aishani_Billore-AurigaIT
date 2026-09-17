@@ -289,6 +289,9 @@ app.get('/api/appointments', (req, res) => {
           endTime: a.end_time,
           reason: a.reason,
           status: a.status,
+          arrivalTime: a.arrival_time,
+          arrivalStatus: a.arrival_status,
+          minutesLate: a.minutes_late || 0,
           cancellationFee: a.cancellation_fee,
           cancellationFeeStatus: a.cancellation_fee_status,
           cancellationReason: a.cancellation_reason,
@@ -421,6 +424,86 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
         });
       }
     );
+  });
+});
+
+// --- PATIENT ARRIVAL & LIVE TRACKING ENDPOINTS ---
+app.post('/api/appointments/:id/check-in', (req, res) => {
+  const { id } = req.params;
+  const now = new Date();
+  const arrivalTime = req.body.arrivalTime || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  db.get('SELECT * FROM appointments WHERE id = ?', [id], (err, apt) => {
+    if (err || !apt) return res.status(404).json({ error: 'Appointment not found' });
+
+    const arrivalMins = timeToMinutes(arrivalTime);
+    const startMins = timeToMinutes(apt.start_time);
+    const isLate = arrivalMins > startMins;
+    const minutesLate = isLate ? (arrivalMins - startMins) : 0;
+    const arrivalStatus = isLate ? `LATE (${minutesLate}m late)` : 'ON_TIME';
+
+    db.run(
+      `UPDATE appointments SET status = 'IN_PROGRESS', arrival_time = ?, arrival_status = ?, minutes_late = ? WHERE id = ?`,
+      [arrivalTime, arrivalStatus, minutesLate, id],
+      function (err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({
+          id,
+          status: 'IN_PROGRESS',
+          arrivalTime,
+          arrivalStatus,
+          minutesLate,
+          message: isLate ? `Patient arrived ${minutesLate} minutes late.` : 'Patient arrived on time.'
+        });
+      }
+    );
+  });
+});
+
+app.post('/api/appointments/:id/complete', (req, res) => {
+  const { id } = req.params;
+  db.run(`UPDATE appointments SET status = 'COMPLETED' WHERE id = ?`, [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ id, status: 'COMPLETED', message: 'Appointment marked as COMPLETED.' });
+  });
+});
+
+app.get('/api/patients/:id/history', (req, res) => {
+  const { id } = req.params;
+  db.all('SELECT * FROM appointments WHERE patient_id = ? ORDER BY date DESC, start_time DESC', [id], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const totalVisits = rows.length;
+    const completed = rows.filter(r => r.status === 'COMPLETED' || r.status === 'IN_PROGRESS').length;
+    const onTimeCount = rows.filter(r => r.arrival_status === 'ON_TIME').length;
+    const lateCount = rows.filter(r => r.arrival_status && r.arrival_status.startsWith('LATE')).length;
+    const noShowCount = rows.filter(r => r.status === 'NO_SHOW').length;
+    const cancelledCount = rows.filter(r => r.status === 'CANCELLED').length;
+
+    res.json({
+      patientId: id,
+      summary: {
+        totalVisits,
+        completed,
+        onTimeCount,
+        lateCount,
+        noShowCount,
+        cancelledCount,
+        punctualityScore: totalVisits > 0 ? Math.round((onTimeCount / Math.max(1, onTimeCount + lateCount)) * 100) + '%' : 'N/A'
+      },
+      history: rows.map(a => ({
+        id: a.id,
+        doctorName: a.doctor_name,
+        date: a.date,
+        startTime: a.start_time,
+        endTime: a.end_time,
+        status: a.status,
+        arrivalTime: a.arrival_time,
+        arrivalStatus: a.arrival_status,
+        minutesLate: a.minutes_late || 0,
+        cancellationFee: a.cancellation_fee
+      }))
+    });
   });
 });
 

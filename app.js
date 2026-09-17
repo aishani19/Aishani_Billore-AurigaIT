@@ -383,21 +383,60 @@ class ClinicApp {
           const card = document.createElement('div');
           const isCancelled = apt.status === 'CANCELLED';
           card.className = `slot-card ${isCancelled ? 'cancelled' : 'booked'}`;
-          
+          let statusBadge = '';
+          if (isCancelled) {
+            statusBadge = `<span class="badge badge-cancelled">CANCELLED ${apt.cancellationFee > 0 ? `(₹${apt.cancellationFee} Late Fee)` : ''}</span>`;
+          } else if (apt.status === 'IN_PROGRESS') {
+            statusBadge = `<span class="badge" style="background:#0284c7; color:#fff;">🟢 IN CONSULTATION</span>`;
+          } else if (apt.status === 'COMPLETED') {
+            statusBadge = `<span class="badge" style="background:#059669; color:#fff;">✅ COMPLETED</span>`;
+          } else if (apt.status === 'NO_SHOW') {
+            statusBadge = `<span class="badge" style="background:#dc2626; color:#fff;">⚠️ NO SHOW</span>`;
+          }
+
+          let arrivalTag = '';
+          if (apt.arrivalTime) {
+            const isLate = apt.arrivalStatus && apt.arrivalStatus.startsWith('LATE');
+            arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:${isLate ? '#dc2626' : '#059669'};">
+              ${isLate ? `⏱️ Arrived ${apt.minutesLate}m Late (${apt.arrivalTime})` : `✅ Arrived On Time (${apt.arrivalTime})`}
+            </div>`;
+          }
+
           card.innerHTML = `
             <div class="slot-time">⏱️ ${apt.startTime} - ${apt.endTime}</div>
             <div class="slot-patient">${apt.patientName}</div>
             <div class="slot-reason">${apt.reason || 'General Consultation'}</div>
-            ${isCancelled ? `<div style="margin-top:0.3rem;"><span class="badge badge-cancelled">CANCELLED ${apt.cancellationFee > 0 ? `(₹${apt.cancellationFee} Late Fee)` : ''}</span></div>` : ''}
-            ${!isCancelled ? `
-              <div class="slot-actions">
-                <button class="btn btn-sm btn-outline btn-reschedule-apt" data-id="${apt.id}" style="margin-right:4px;">Reschedule</button>
+            ${statusBadge ? `<div style="margin-top:0.3rem;">${statusBadge}</div>` : ''}
+            ${arrivalTag}
+            ${!isCancelled && apt.status !== 'COMPLETED' ? `
+              <div class="slot-actions" style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.25rem;">
+                ${apt.status === 'BOOKED' ? `<button class="btn btn-sm btn-primary btn-checkin-apt" data-id="${apt.id}">📍 Mark Arrived</button>` : ''}
+                ${apt.status === 'IN_PROGRESS' ? `<button class="btn btn-sm btn-success btn-complete-apt" data-id="${apt.id}" style="background:#059669; color:#fff;">✅ Complete Visit</button>` : ''}
+                <button class="btn btn-sm btn-outline btn-reschedule-apt" data-id="${apt.id}">Reschedule</button>
                 <button class="btn btn-sm btn-outline btn-cancel-apt" data-id="${apt.id}">Cancel</button>
               </div>
             ` : ''}
           `;
 
           if (!isCancelled) {
+            card.querySelector('.btn-checkin-apt')?.addEventListener('click', async () => {
+              const res = await this.apiRequest(`/api/appointments/${apt.id}/check-in`, 'POST');
+              if (res && !res.error) {
+                this.showToast(`📍 Patient Checked In! ${res.message}`, res.minutesLate > 0 ? 'error' : 'success');
+                await this.loadInitialData();
+                this.render();
+              }
+            });
+
+            card.querySelector('.btn-complete-apt')?.addEventListener('click', async () => {
+              const res = await this.apiRequest(`/api/appointments/${apt.id}/complete`, 'POST');
+              if (res && !res.error) {
+                this.showToast('✅ Consultation completed successfully!', 'success');
+                await this.loadInitialData();
+                this.render();
+              }
+            });
+
             card.querySelector('.btn-cancel-apt')?.addEventListener('click', () => {
               this.openCancelModal(apt);
             });
@@ -670,8 +709,20 @@ class ClinicApp {
     document.getElementById('detail-patient-email').textContent = `✉️ ${patient.email || 'N/A'}`;
     document.getElementById('detail-patient-dob').textContent = `🎂 DOB: ${patient.dob || 'N/A'}`;
 
-    let aptsRes = await this.apiRequest(`/api/appointments?patientId=${patient.id}&limit=100`);
-    let appointments = aptsRes ? aptsRes.appointments : store.getAppointments().filter(a => a.patientId === patient.id);
+    let historyData = await this.apiRequest(`/api/patients/${patient.id}/history`);
+    let summary = historyData ? historyData.summary : null;
+    let appointments = historyData ? historyData.history : (aptsRes ? aptsRes.appointments : store.getAppointments().filter(a => a.patientId === patient.id));
+
+    if (summary) {
+      document.getElementById('detail-patient-dob').innerHTML = `
+        🎂 DOB: ${patient.dob || 'N/A'}<br>
+        <div style="margin-top:0.4rem; padding:0.4rem 0.6rem; background:rgba(2, 132, 199, 0.08); border-radius:6px; font-size:0.8rem; color:var(--text-main);">
+          <strong>📊 Attendance & Punctuality Record:</strong><br>
+          Visits: <strong>${summary.totalVisits}</strong> | On-Time: <strong style="color:#059669;">${summary.onTimeCount}</strong> | Late: <strong style="color:#dc2626;">${summary.lateCount}</strong> | No-Shows: <strong style="color:#b91c1c;">${summary.noShowCount}</strong><br>
+          Punctuality Score: <strong style="color:var(--primary);">${summary.punctualityScore}</strong>
+        </div>
+      `;
+    }
 
     const historyList = document.getElementById('patient-history-list');
     historyList.innerHTML = '';
@@ -685,19 +736,36 @@ class ClinicApp {
       const isCancelled = apt.status === 'CANCELLED';
       const card = document.createElement('div');
       card.className = 'history-card';
-      
+
+      let statusBadge = `<span class="badge badge-booked">${apt.status}</span>`;
+      if (isCancelled) {
+        statusBadge = `<span class="badge badge-cancelled">CANCELLED ${apt.cancellationFee > 0 ? `(₹${apt.cancellationFee} Fee)` : ''}</span>`;
+      } else if (apt.status === 'IN_PROGRESS') {
+        statusBadge = `<span class="badge" style="background:#0284c7; color:#fff;">🟢 IN CONSULTATION</span>`;
+      } else if (apt.status === 'COMPLETED') {
+        statusBadge = `<span class="badge" style="background:#059669; color:#fff;">✅ COMPLETED</span>`;
+      } else if (apt.status === 'NO_SHOW') {
+        statusBadge = `<span class="badge" style="background:#dc2626; color:#fff;">⚠️ NO SHOW</span>`;
+      }
+
+      let arrivalInfo = '';
+      if (apt.arrivalTime) {
+        const isLate = apt.arrivalStatus && apt.arrivalStatus.startsWith('LATE');
+        arrivalInfo = `<div style="font-size:0.75rem; font-weight:600; color:${isLate ? '#dc2626' : '#059669'}; margin-top:0.2rem;">
+          ${isLate ? `⏱️ Arrived ${apt.minutesLate || ''}m Late at ${apt.arrivalTime}` : `✅ Arrived On-Time at ${apt.arrivalTime}`}
+        </div>`;
+      }
+
       card.innerHTML = `
         <div class="history-main">
-          <strong>${apt.doctorName}</strong>
-          <span>📅 ${apt.date} at ${apt.startTime} - ${apt.endTime} (${apt.reason})</span>
+          <strong>${apt.doctorName || 'Doctor'}</strong>
+          <span>📅 ${apt.date} at ${apt.startTime} - ${apt.endTime} (${apt.reason || 'Consultation'})</span>
+          ${arrivalInfo}
           ${isCancelled && apt.cancellationReason ? `<div style="font-size:0.75rem; color:#ef4444; margin-top:0.2rem;">${apt.cancellationReason}</div>` : ''}
         </div>
         <div style="text-align:right;">
-          ${isCancelled 
-            ? `<span class="badge badge-cancelled">CANCELLED ${apt.cancellationFee > 0 ? `(₹${apt.cancellationFee} Fee)` : ''}</span>`
-            : `<span class="badge badge-booked">BOOKED</span>`
-          }
-          ${!isCancelled ? `
+          ${statusBadge}
+          ${!isCancelled && apt.status !== 'COMPLETED' ? `
             <div style="margin-top:0.4rem;">
               <button class="btn btn-sm btn-outline btn-cancel-history" data-id="${apt.id}">Cancel</button>
             </div>

@@ -68,9 +68,10 @@ function initDb() {
         )
       `);
 
-      db.run(`ALTER TABLE appointments ADD COLUMN reminder_status TEXT DEFAULT 'NOT_SENT'`, (err) => {
-        // Ignore duplicate column error if already exists
-      });
+      db.run(`ALTER TABLE appointments ADD COLUMN reminder_status TEXT DEFAULT 'NOT_SENT'`, (err) => {});
+      db.run(`ALTER TABLE appointments ADD COLUMN arrival_time TEXT`, (err) => {});
+      db.run(`ALTER TABLE appointments ADD COLUMN arrival_status TEXT`, (err) => {});
+      db.run(`ALTER TABLE appointments ADD COLUMN minutes_late INTEGER DEFAULT 0`, (err) => {});
 
       // Payments table
       db.run(`

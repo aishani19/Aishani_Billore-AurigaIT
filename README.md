@@ -88,7 +88,15 @@ The system automatically initializes a SQLite database with seed data:
 | Method | Endpoint | Description | Query / Body Parameters |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/clock` | **Level 2 (T1) & Level 3 (T2)**: Trigger morning notifications into outbox & auto-mark NO_SHOW 30 min after start | `{ date, time }` or default system clock |
+| `POST` | `/api/schedule/run-10am-reminders` | **Daily 10:00 AM Scheduler**: Dispatch morning appointment alerts to outbox | `{ date }` |
 | `GET` | `/outbox` | **Level 2 (T1)**: Retrieve sent morning notifications audit log | None |
+
+### 📍 Patient Arrival & Live Visit Tracking Endpoints
+| Method | Endpoint | Description | Body Parameters |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/appointments/:id/check-in` | Mark patient arrived, calculate punctuality (`ON_TIME` vs `LATE`), set status `IN_PROGRESS` | `{ arrivalTime }` |
+| `POST` | `/api/appointments/:id/complete` | Complete active consultation visit | None |
+| `GET` | `/api/patients/:id/history` | Get patient attendance, punctuality score (%), and visit timeline | Path `:id` |
 
 ### 💳 Payment Gateway Checkout Endpoints
 | Method | Endpoint | Description | Body Parameters |
