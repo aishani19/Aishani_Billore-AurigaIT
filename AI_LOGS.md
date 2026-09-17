@@ -6,6 +6,18 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+https://pulsecare19.vercel.app/ add this deploymened link in my github
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Added live Vercel deployment link to `README.md`:
+- **Live Deployed Application**: [https://pulsecare19.vercel.app/](https://pulsecare19.vercel.app/)
+- **Vercel & GitHub Badges**: Added Shields.io badges linking directly to live demo and repository.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 why i have to refersh the page everytime the i click on the arrived completed make it work real time dont let me refersh get it refreshed automatically
 </USER_REQUEST>
 
