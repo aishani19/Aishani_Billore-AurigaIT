@@ -366,7 +366,7 @@ app.post('/api/appointments/:id/cancel', authenticateToken, (req, res) => {
 });
 
 // --- PAYMENTS ENDPOINT (REAL PAYMENT SYSTEM INTEGRATION) ---
-app.post('/api/payments/process', authenticateToken, (req, res) => {
+app.post('/api/payments/process', (req, res) => {
   const { appointmentId, patientId, amount, paymentMethod = 'UPI' } = req.body;
   
   if (!appointmentId || !patientId || !amount) {
