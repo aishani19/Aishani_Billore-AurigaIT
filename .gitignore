@@ -1,0 +1,4 @@
+node_modules/
+clinic.db-journal
+*.log
+.DS_Store
