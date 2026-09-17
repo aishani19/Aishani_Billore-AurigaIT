@@ -163,6 +163,24 @@ function checkConflictInternal(doctorId, date, startTime, endTime, excludeId = n
       });
     }
 
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+
+    if (date < todayStr) {
+      return resolve({
+        hasConflict: true,
+        reason: 'Cannot book or reschedule appointments for past dates.'
+      });
+    }
+
+    if (date === todayStr && startMins < currentMins) {
+      return resolve({
+        hasConflict: true,
+        reason: 'Cannot book or reschedule appointments for past times today.'
+      });
+    }
+
     db.all(
       `SELECT * FROM appointments WHERE doctor_id = ? AND date = ? AND status != 'CANCELLED'`,
       [doctorId, date],

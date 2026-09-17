@@ -29,6 +29,24 @@ function checkBookingConflict(doctorId, date, startTime, endTime, excludeAptId =
     };
   }
 
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+
+  if (date < todayStr) {
+    return {
+      hasConflict: true,
+      reason: 'Cannot book or reschedule appointments for past dates.'
+    };
+  }
+
+  if (date === todayStr && startMins < currentMins) {
+    return {
+      hasConflict: true,
+      reason: 'Cannot book or reschedule appointments for past times today.'
+    };
+  }
+
   const conflicting = appointments.find(apt => {
     if (apt.id === excludeAptId) return false;
     if (apt.status === 'CANCELLED') return false;
@@ -90,10 +108,17 @@ function getDoctorFreeSlots(doctorId, date, durationMins = 30) {
   const dayStart = 9 * 60; // 9:00 AM
   const dayEnd = 17 * 60;  // 5:00 PM
   
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const currentMins = now.getHours() * 60 + now.getMinutes();
+
   const freeSlots = [];
   for (let current = dayStart; current + durationMins <= dayEnd; current += 30) {
     const slotStart = current;
     const slotEnd = current + durationMins;
+
+    if (date < todayStr) continue;
+    if (date === todayStr && slotStart < currentMins) continue;
     const isConflict = appointments.some(apt => {
       const aptStart = timeToMinutes(apt.startTime);
       const aptEnd = timeToMinutes(apt.endTime);

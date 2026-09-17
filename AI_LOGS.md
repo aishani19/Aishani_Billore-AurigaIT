@@ -6,6 +6,19 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+dont let me book for previous days or previous time 
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Implemented strict validation to reject booking or rescheduling for past dates and past times:
+- **Server Enforcement (`server.js`)**: Rejects bookings/reschedules for `date < today` ("Cannot book or reschedule appointments for past dates.") or `date == today && startTime < currentTime` ("Cannot book or reschedule appointments for past times today.") with HTTP 409.
+- **Rules Engine (`rules.js`)**: Updated `checkBookingConflict` and `getDoctorFreeSlots` to filter out past slots.
+- **UI Enhancements (`app.js`)**: Added `min` attribute constraint (`min="yyyy-mm-dd"`) to all date picker controls.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 Twists for this problem
 Level 1 — T6 (lifecycle): “Reschedule an appointment to a new time; it must stay conflict-free (re-check overlap) and keep the same patient and doctor.”
 Level 2 — T1 (integrate): “Each morning, remind patients of today’s appointments via the Notification Service.” Graded via /outbox after POST /clock.

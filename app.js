@@ -277,6 +277,8 @@ class ClinicApp {
 
   setupDatePickers() {
     const dateInput = document.getElementById('schedule-date-input');
+    const todayStr = getTodayString(0);
+    if (dateInput) dateInput.min = todayStr;
     dateInput.value = this.selectedDate;
 
     dateInput.addEventListener('change', (e) => {
@@ -311,7 +313,13 @@ class ClinicApp {
       this.renderScheduleView();
     });
 
-    document.getElementById('book-date').value = this.selectedDate;
+    const bookDate = document.getElementById('book-date');
+    if (bookDate) {
+      bookDate.min = todayStr;
+      bookDate.value = this.selectedDate;
+    }
+    const rDate = document.getElementById('reschedule-date');
+    if (rDate) rDate.min = todayStr;
   }
 
   async populateDropdowns() {
