@@ -6,6 +6,20 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+show arrival for all of the patients its showing only on one use as less tokens as possible
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Updated arrival status display so **every single patient card** explicitly shows its arrival state:
+- **Checked In / Completed**: Displays `✅ Arrived On Time (HH:MM)` or `⏱️ Arrived Xm Late (HH:MM)`.
+- **Awaiting Arrival (BOOKED)**: Displays `⏳ Awaiting Patient Arrival (Scheduled: HH:MM)`.
+- **No-Show**: Displays `⚠️ Arrival Missed (No-Show recorded)`.
+- **Cancelled**: Displays `🚫 Not Arrived (Visit Cancelled)`.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 implement it and also add whenever the patient arrives the history of the patients are also shown when they arrived were they late and is the appointment still going on or not make it real time working for the receiptionist use as less tokens as possible
 </USER_REQUEST>
 

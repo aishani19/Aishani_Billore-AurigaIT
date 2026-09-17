@@ -397,8 +397,20 @@ class ClinicApp {
           let arrivalTag = '';
           if (apt.arrivalTime) {
             const isLate = apt.arrivalStatus && apt.arrivalStatus.startsWith('LATE');
-            arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:${isLate ? '#dc2626' : '#059669'};">
-              ${isLate ? `⏱️ Arrived ${apt.minutesLate}m Late (${apt.arrivalTime})` : `✅ Arrived On Time (${apt.arrivalTime})`}
+            arrivalTag = `<div style="font-size:0.75rem; font-weight:700; margin-top:0.25rem; color:${isLate ? '#dc2626' : '#059669'};">
+              ${isLate ? `⏱️ Arrived ${apt.minutesLate || 0}m Late (${apt.arrivalTime})` : `✅ Arrived On Time (${apt.arrivalTime})`}
+            </div>`;
+          } else if (apt.status === 'NO_SHOW') {
+            arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:#dc2626;">
+              ⚠️ Arrival Missed (No-Show recorded)
+            </div>`;
+          } else if (isCancelled) {
+            arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:#94a3b8;">
+              🚫 Not Arrived (Visit Cancelled)
+            </div>`;
+          } else {
+            arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:#0284c7;">
+              ⏳ Awaiting Patient Arrival (Scheduled: ${apt.startTime})
             </div>`;
           }
 
@@ -751,9 +763,15 @@ class ClinicApp {
       let arrivalInfo = '';
       if (apt.arrivalTime) {
         const isLate = apt.arrivalStatus && apt.arrivalStatus.startsWith('LATE');
-        arrivalInfo = `<div style="font-size:0.75rem; font-weight:600; color:${isLate ? '#dc2626' : '#059669'}; margin-top:0.2rem;">
-          ${isLate ? `⏱️ Arrived ${apt.minutesLate || ''}m Late at ${apt.arrivalTime}` : `✅ Arrived On-Time at ${apt.arrivalTime}`}
+        arrivalInfo = `<div style="font-size:0.75rem; font-weight:700; color:${isLate ? '#dc2626' : '#059669'}; margin-top:0.2rem;">
+          ${isLate ? `⏱️ Arrived ${apt.minutesLate || 0}m Late at ${apt.arrivalTime}` : `✅ Arrived On-Time at ${apt.arrivalTime}`}
         </div>`;
+      } else if (apt.status === 'NO_SHOW') {
+        arrivalInfo = `<div style="font-size:0.75rem; font-weight:600; color:#dc2626; margin-top:0.2rem;">⚠️ Arrival Missed (No-Show recorded)</div>`;
+      } else if (isCancelled) {
+        arrivalInfo = `<div style="font-size:0.75rem; font-weight:600; color:#94a3b8; margin-top:0.2rem;">🚫 Not Arrived (Visit Cancelled)</div>`;
+      } else {
+        arrivalInfo = `<div style="font-size:0.75rem; font-weight:600; color:#0284c7; margin-top:0.2rem;">⏳ Awaiting Patient Arrival</div>`;
       }
 
       card.innerHTML = `
