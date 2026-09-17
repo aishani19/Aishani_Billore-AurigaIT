@@ -49,6 +49,14 @@ class ClinicApp {
     };
     updateTime();
     setInterval(updateTime, 1000);
+
+    // Real-time automatic background sync for receptionist dashboard (every 3 seconds)
+    setInterval(async () => {
+      if (this.currentTab === 'tab-schedule') {
+        await this.renderScheduleView();
+        await this.updateStatsBar();
+      }
+    }, 3000);
   }
 
   // --- COMMAND PALETTE (Ctrl + K) ---
@@ -435,8 +443,8 @@ class ClinicApp {
               const res = await this.apiRequest(`/api/appointments/${apt.id}/check-in`, 'POST');
               if (res && !res.error) {
                 this.showToast(`📍 Patient Checked In! ${res.message}`, res.minutesLate > 0 ? 'error' : 'success');
-                await this.loadInitialData();
-                this.render();
+                await this.renderScheduleView();
+                await this.updateStatsBar();
               }
             });
 
@@ -444,8 +452,8 @@ class ClinicApp {
               const res = await this.apiRequest(`/api/appointments/${apt.id}/complete`, 'POST');
               if (res && !res.error) {
                 this.showToast('✅ Consultation completed successfully!', 'success');
-                await this.loadInitialData();
-                this.render();
+                await this.renderScheduleView();
+                await this.updateStatsBar();
               }
             });
 
@@ -1048,8 +1056,8 @@ class ClinicApp {
       } else {
         this.showToast('Appointment rescheduled successfully! Conflict check verified.', 'success');
         rModal.classList.add('hidden');
-        await this.loadInitialData();
-        this.render();
+        await this.renderScheduleView();
+        await this.updateStatsBar();
       }
     });
 
@@ -1059,8 +1067,8 @@ class ClinicApp {
       const res = await this.apiRequest('/clock', 'POST', { current_time: nowIso });
       if (res && !res.error) {
         this.showToast(`⏰ Clock Processed! Reminders Outbox: ${res.remindersSent}, Auto No-Shows Marked: ${res.noShowsMarked}`, 'success');
-        await this.loadInitialData();
-        this.render();
+        await this.renderScheduleView();
+        await this.updateStatsBar();
       } else {
         this.showToast(`Clock trigger failed: ${res?.error || 'Server error'}`, 'error');
       }

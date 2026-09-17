@@ -6,6 +6,19 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+why i have to refersh the page everytime the i click on the arrived completed make it work real time dont let me refersh get it refreshed automatically
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Resolved issue where manual page refresh was required:
+- **Fixed Undefined Function Call**: Replaced non-existent `loadInitialData()` call with `renderScheduleView()` and `updateStatsBar()` across check-in, visit completion, rescheduling, and clock trigger event handlers.
+- **Instant UI State Update**: Clicking `📍 Mark Arrived` or `✅ Complete Visit` now immediately re-renders the DOM in real-time.
+- **Automatic 3-Second Background Sync**: Added automatic 3-second background polling interval in `startLiveClock()` so receptionist dashboard stays 100% synchronized automatically.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 show arrival for all of the patients its showing only on one use as less tokens as possible
 </USER_REQUEST>
 
