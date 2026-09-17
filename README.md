@@ -1,9 +1,5 @@
 # PulseCare Clinic - Front Desk Management & ConflictGuard™
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-pulsecare19.vercel.app-0284c7?style=for-the-badge&logo=vercel)](https://pulsecare19.vercel.app/)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/aishani19/Aishani_Billore-AurigaIT)
-
-
 PulseCare is a full-stack clinic appointment management system built for busy medical clinics with multiple doctors. It eliminates doctor double-bookings using a real-time interval conflict prevention engine (**ConflictGuard™**), enforces a fair 24-hour late cancellation fee policy (**₹500 fee** for late cancellations vs **₹0** for early cancellations), provides instant patient lookups, daily doctor schedules, pagination, sorting, search, and user registration/login.
 
 ---

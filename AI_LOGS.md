@@ -6,13 +6,11 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
-https://pulsecare19.vercel.app/ add this deploymened link in my github
+remove it 
 </USER_REQUEST>
 
 ### 🤖 ASSISTANT
-Added live Vercel deployment link to `README.md`:
-- **Live Deployed Application**: [https://pulsecare19.vercel.app/](https://pulsecare19.vercel.app/)
-- **Vercel & GitHub Badges**: Added Shields.io badges linking directly to live demo and repository.
+Removed the Vercel deployment link and badges from `README.md`.
 
 ---
 
