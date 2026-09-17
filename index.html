@@ -71,6 +71,7 @@
           <div class="live-time-badge" id="live-clock">
             <span>🕒</span> <span id="clock-text">--:--:--</span>
           </div>
+          <button id="btn-trigger-clock" class="btn btn-outline" title="Trigger morning reminders (/outbox) and auto no-show job via POST /clock">⏰ POST /clock</button>
           <button id="btn-header-login" class="btn btn-outline hidden">🔑 Staff Login</button>
           <button id="btn-quick-book" class="btn btn-primary"><span>+</span> Book Appointment</button>
         </div>
@@ -621,6 +622,37 @@
         <button type="button" class="btn btn-secondary" id="btn-abort-cancel">Keep Appointment</button>
         <button type="button" class="btn btn-danger" id="btn-confirm-cancel">Confirm Cancellation</button>
       </div>
+    </div>
+  </div>
+
+  <div id="modal-reschedule-appointment" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Reschedule Appointment</h3>
+        <button class="modal-close" id="btn-close-reschedule-modal">✕</button>
+      </div>
+      <form id="form-reschedule-appointment">
+        <input type="hidden" id="reschedule-appt-id">
+        <div class="modal-body">
+          <p id="reschedule-info-text" style="font-size:0.9rem; font-weight:600; color:var(--text-muted); margin-bottom:1rem;"></p>
+          <div class="form-group">
+            <label class="form-label">New Date</label>
+            <input type="date" id="reschedule-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">New Start Time</label>
+            <input type="time" id="reschedule-start" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">New End Time</label>
+            <input type="time" id="reschedule-end" class="form-control" required>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="btn-abort-reschedule">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-confirm-reschedule">Save Reschedule</button>
+        </div>
+      </form>
     </div>
   </div>
 

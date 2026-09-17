@@ -383,14 +383,18 @@ class ClinicApp {
             ${isCancelled ? `<div style="margin-top:0.3rem;"><span class="badge badge-cancelled">CANCELLED ${apt.cancellationFee > 0 ? `(₹${apt.cancellationFee} Late Fee)` : ''}</span></div>` : ''}
             ${!isCancelled ? `
               <div class="slot-actions">
+                <button class="btn btn-sm btn-outline btn-reschedule-apt" data-id="${apt.id}" style="margin-right:4px;">Reschedule</button>
                 <button class="btn btn-sm btn-outline btn-cancel-apt" data-id="${apt.id}">Cancel</button>
               </div>
             ` : ''}
           `;
 
           if (!isCancelled) {
-            card.querySelector('.btn-cancel-apt').addEventListener('click', () => {
+            card.querySelector('.btn-cancel-apt')?.addEventListener('click', () => {
               this.openCancelModal(apt);
+            });
+            card.querySelector('.btn-reschedule-apt')?.addEventListener('click', () => {
+              this.openRescheduleModal(apt);
             });
           }
 
@@ -924,6 +928,42 @@ class ClinicApp {
       }
     });
 
+    // --- RESCHEDULE MODAL ---
+    const rModal = document.getElementById('modal-reschedule-appointment');
+    document.getElementById('btn-close-reschedule-modal')?.addEventListener('click', () => rModal.classList.add('hidden'));
+    document.getElementById('btn-abort-reschedule')?.addEventListener('click', () => rModal.classList.add('hidden'));
+
+    document.getElementById('form-reschedule-appointment')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('reschedule-appt-id').value;
+      const date = document.getElementById('reschedule-date').value;
+      const startTime = document.getElementById('reschedule-start').value;
+      const endTime = document.getElementById('reschedule-end').value;
+
+      const res = await this.apiRequest(`/api/appointments/${id}/reschedule`, 'PUT', { date, startTime, endTime });
+      if (res && res.error) {
+        this.showToast(`Reschedule failed: ${res.error}`, 'error');
+      } else {
+        this.showToast('Appointment rescheduled successfully! Conflict check verified.', 'success');
+        rModal.classList.add('hidden');
+        await this.loadInitialData();
+        this.render();
+      }
+    });
+
+    // --- CLOCK TRIGGER FOR MORNING REMINDERS & AUTO NO-SHOW ---
+    document.getElementById('btn-trigger-clock')?.addEventListener('click', async () => {
+      const nowIso = new Date().toISOString();
+      const res = await this.apiRequest('/clock', 'POST', { current_time: nowIso });
+      if (res && !res.error) {
+        this.showToast(`⏰ Clock Processed! Reminders Outbox: ${res.remindersSent}, Auto No-Shows Marked: ${res.noShowsMarked}`, 'success');
+        await this.loadInitialData();
+        this.render();
+      } else {
+        this.showToast(`Clock trigger failed: ${res?.error || 'Server error'}`, 'error');
+      }
+    });
+
     // --- PAYMENT CHECKOUT & DIGITAL RECEIPT MODALS ---
     const payModal = document.getElementById('modal-payment-checkout');
     const receiptModal = document.getElementById('modal-digital-receipt');
@@ -1103,6 +1143,16 @@ Payment Status: CLEARED & PAID (SUCCESS)
     }
 
     cModal.classList.remove('hidden');
+  }
+
+  openRescheduleModal(appointment) {
+    const rModal = document.getElementById('modal-reschedule-appointment');
+    document.getElementById('reschedule-appt-id').value = appointment.id;
+    document.getElementById('reschedule-info-text').textContent = `Patient: ${appointment.patientName} | Doctor: ${appointment.doctorName}`;
+    document.getElementById('reschedule-date').value = appointment.date || this.selectedDate;
+    document.getElementById('reschedule-start').value = appointment.startTime || '10:00';
+    document.getElementById('reschedule-end').value = appointment.endTime || '10:30';
+    rModal.classList.remove('hidden');
   }
 
   showToast(message, type = 'success') {

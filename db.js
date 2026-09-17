@@ -87,6 +87,21 @@ function initDb() {
           FOREIGN KEY (appointment_id) REFERENCES appointments(id),
           FOREIGN KEY (patient_id) REFERENCES patients(id)
         )
+      `);
+
+      // Outbox table for Level 2 morning reminders
+      db.run(`
+        CREATE TABLE IF NOT EXISTS outbox (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          patient_name TEXT NOT NULL,
+          doctor_id TEXT NOT NULL,
+          doctor_name TEXT NOT NULL,
+          appointment_id TEXT NOT NULL,
+          message TEXT NOT NULL,
+          type TEXT DEFAULT 'MORNING_REMINDER',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
       `, (err) => {
         if (err) return reject(err);
         seedData().then(resolve).catch(reject);

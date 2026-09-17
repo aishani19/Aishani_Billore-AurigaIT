@@ -365,6 +365,102 @@ app.post('/api/appointments/:id/cancel', authenticateToken, (req, res) => {
   });
 });
 
+// --- LEVEL 1 (T6): RESCHEDULE APPOINTMENT ---
+app.put('/api/appointments/:id/reschedule', async (req, res) => {
+  const { id } = req.params;
+  const { date, startTime, endTime } = req.body;
+
+  if (!date || !startTime || !endTime) {
+    return res.status(400).json({ error: 'date, startTime, and endTime are required' });
+  }
+
+  db.get('SELECT * FROM appointments WHERE id = ?', [id], async (err, apt) => {
+    if (err || !apt) return res.status(404).json({ error: 'Appointment not found' });
+    if (apt.status === 'CANCELLED') return res.status(400).json({ error: 'Cannot reschedule a cancelled appointment' });
+
+    // Re-check conflict excluding current appointment ID
+    const conflictCheck = await checkConflictInternal(apt.doctor_id, date, startTime, endTime, id);
+    if (conflictCheck.hasConflict) {
+      return res.status(409).json({ error: conflictCheck.reason, conflict: true });
+    }
+
+    db.run(
+      `UPDATE appointments SET date = ?, start_time = ?, end_time = ? WHERE id = ?`,
+      [date, startTime, endTime, id],
+      function (err2) {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.json({
+          id,
+          patientId: apt.patient_id,
+          patientName: apt.patient_name,
+          doctorId: apt.doctor_id,
+          doctorName: apt.doctor_name,
+          date,
+          startTime,
+          endTime,
+          reason: apt.reason,
+          status: apt.status
+        });
+      }
+    );
+  });
+});
+
+// --- LEVEL 2 (T1) & LEVEL 3 (T2): SYSTEM CLOCK TRIGGER & AUTOMATION ---
+app.post('/clock', (req, res) => {
+  const now = new Date();
+  const currentDate = req.body.date || now.toISOString().split('T')[0];
+  const currentTime = req.body.time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const clockMins = timeToMinutes(currentTime);
+
+  db.all('SELECT * FROM appointments WHERE date = ? AND status != "CANCELLED"', [currentDate], (err, apts) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    let remindersSent = 0;
+    let noShowsMarked = 0;
+
+    const stmtOutbox = db.prepare(
+      `INSERT INTO outbox (id, patient_id, patient_name, doctor_id, doctor_name, appointment_id, message, type) VALUES (?, ?, ?, ?, ?, ?, ?, 'MORNING_REMINDER')`
+    );
+
+    const stmtNoShow = db.prepare(
+      `UPDATE appointments SET status = 'NO_SHOW' WHERE id = ?`
+    );
+
+    apts.forEach(apt => {
+      // Level 2 (T1): Morning Reminder to /outbox
+      const outboxId = 'out-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+      const msg = `Good morning ${apt.patient_name}, reminder for your appointment today with ${apt.doctor_name} at ${apt.start_time}.`;
+      stmtOutbox.run(outboxId, apt.patient_id, apt.patient_name, apt.doctor_id, apt.doctor_name, apt.id, msg);
+      remindersSent++;
+
+      // Level 3 (T2): Auto No-Show 30 min after start time if still BOOKED
+      const aptStartMins = timeToMinutes(apt.start_time);
+      if (apt.status === 'BOOKED' && clockMins >= (aptStartMins + 30)) {
+        stmtNoShow.run(apt.id);
+        noShowsMarked++;
+      }
+    });
+
+    stmtOutbox.finalize();
+    stmtNoShow.finalize();
+
+    res.json({
+      success: true,
+      clock: { date: currentDate, time: currentTime },
+      morningRemindersSent: remindersSent,
+      noShowsAutoMarked: noShowsMarked
+    });
+  });
+});
+
+app.get('/outbox', (req, res) => {
+  db.all('SELECT * FROM outbox ORDER BY created_at DESC LIMIT 100', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
 // --- PAYMENTS ENDPOINT (REAL PAYMENT SYSTEM INTEGRATION) ---
 app.post('/api/payments/process', (req, res) => {
   const { appointmentId, patientId, amount, paymentMethod = 'UPI' } = req.body;

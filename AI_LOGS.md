@@ -6,6 +6,22 @@ Full raw chronological transcript of the conversation with the AI assistant duri
 
 ### 👤 USER
 <USER_REQUEST>
+Twists for this problem
+Level 1 — T6 (lifecycle): “Reschedule an appointment to a new time; it must stay conflict-free (re-check overlap) and keep the same patient and doctor.”
+Level 2 — T1 (integrate): “Each morning, remind patients of today’s appointments via the Notification Service.” Graded via /outbox after POST /clock.
+Level 3 — T2 (automation): “A job auto-marks appointments as no-show 30 min after their start if not completed.” Graded via POST /clock. to this points use as less tokens as possible
+</USER_REQUEST>
+
+### 🤖 ASSISTANT
+Implemented all 3 Levels cleanly and verified end-to-end:
+- **Level 1 (T6)**: Added `PUT /api/appointments/:id/reschedule` enforcing overlap checks (`checkConflictInternal` with `excludeId`) while preserving patient & doctor. Added Reschedule UI modal.
+- **Level 2 (T1)**: Created `outbox` table and added `POST /clock` and `GET /outbox` endpoints to send morning appointment reminders. Added UI trigger button.
+- **Level 3 (T2)**: Integrated auto `NO_SHOW` marking for appointments 30+ minutes past start time into `POST /clock`.
+
+---
+
+### 👤 USER
+<USER_REQUEST>
 The storyline
 A busy clinic with a few doctors. The front desk books patients into time slots, but keeps double-booking a doctor or letting two patients grab the same slot. Patients cancel — if they cancel in good time it’s free, but a late cancellation should carry a small fee. The desk needs to see a doctor’s day, find a patient’s appointment by name, and never let two appointments for the same doctor overlap.
 Build the front desk something so no doctor is ever double-booked and late cancellations are handled fairly.

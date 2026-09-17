@@ -73,8 +73,16 @@ Integrated desk checkout system (`POST /api/payments/process`) allowing staff to
 
 ---
 
-## 🔮 5. Future Product Roadmap (Three Features to Build Next)
+## 🎯 6. Evaluation Twists & Advanced Lifecycle Automation
 
-1. **Automated SMS & WhatsApp Appointment Reminders**: Send automated alerts 24 hours prior to visit, allowing 1-click confirmation or early cancellation to reduce no-shows by 40%.
-2. **Patient Self-Service Portal & Deposit Holds**: Online scheduling tool with credit card deposit authorization for high-demand doctor slots.
-3. **Telehealth & EHR Integration**: FHIR/HL7 integration to launch virtual waiting rooms and sync consultation notes directly with electronic health record systems.
+### Level 1 — T6 (Lifecycle Rescheduling)
+- **Requirement**: Reschedule an appointment to a new time while maintaining conflict-free validation and keeping the same patient and doctor.
+- **Solution**: Implemented `PUT /api/appointments/:id/reschedule`. The endpoint loads the existing appointment record, preserves `doctor_id` and `patient_id`, and runs `checkConflictInternal(doctor_id, newDate, newStart, newEnd, excludeId)` excluding the appointment's current ID. If clear, it updates `date`, `start_time`, and `end_time`.
+
+### Level 2 — T1 (Notification Service Integration)
+- **Requirement**: Each morning, remind patients of today's appointments via the Notification Service, graded via `/outbox` after `POST /clock`.
+- **Solution**: Created `POST /clock` and `GET /outbox` endpoints and an `outbox` SQLite database table. Upon triggering `POST /clock`, the server fetches active appointments for the given date, formats reminder messages, inserts them into `outbox`, and exposes them via `GET /outbox`.
+
+### Level 3 — T2 (Automation Job - Auto No-Show)
+- **Requirement**: Auto-mark appointments as `NO_SHOW` 30 minutes after their start time if not completed, graded via `POST /clock`.
+- **Solution**: Integrated into `POST /clock`. When the clock advances, for every `BOOKED` appointment on that date where `currentTime >= startTime + 30 minutes`, the status is updated to `NO_SHOW`.
