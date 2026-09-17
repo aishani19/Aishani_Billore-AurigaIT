@@ -539,7 +539,8 @@ class ClinicApp {
   }
 
   downloadCSV(filename, csvData) {
-    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const bomCsv = '\uFEFF' + csvData;
+    const blob = new Blob([bomCsv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.setAttribute('download', filename);
@@ -961,6 +962,8 @@ class ClinicApp {
         paidAt: new Date().toLocaleString()
       };
 
+      this.lastReceipt = { receipt, apt, amount, method: selectedMethod };
+
       apt.cancellationFeeStatus = 'PAID';
       store.updateAppointment(apt);
 
@@ -1020,6 +1023,46 @@ class ClinicApp {
     document.getElementById('btn-done-receipt')?.addEventListener('click', () => receiptModal.classList.add('hidden'));
     document.getElementById('btn-print-receipt')?.addEventListener('click', () => {
       window.print();
+    });
+
+    document.getElementById('btn-download-txt-receipt')?.addEventListener('click', () => {
+      if (!this.lastReceipt) return;
+      const { receipt, apt, amount, method } = this.lastReceipt;
+      const txt = `====================================================
+           🏥 PULSECARE MEDICAL CLINIC
+       Official Cancellation Fee Desk Receipt
+====================================================
+
+Receipt #:      ${receipt.receiptId || 'REC-50012'}
+Txn Ref #:      ${receipt.transactionId || 'TXN-984321'}
+Issue Date:     ${new Date().toLocaleString()}
+
+----------------------------------------------------
+PATIENT & APPOINTMENT DETAILS
+----------------------------------------------------
+Patient Name:   ${apt.patientName}
+Doctor Name:    ${apt.doctorName}
+Appt Date:      ${apt.date} (${apt.startTime})
+Notice Type:    Late Cancellation (< 24 Hours Notice)
+
+----------------------------------------------------
+PAYMENT SUMMARY
+----------------------------------------------------
+Payment Method: ${method}
+Fee Amount:     ₹${parseFloat(amount).toFixed(2)}
+Payment Status: CLEARED & PAID (SUCCESS)
+
+====================================================
+   Thank you for choosing PulseCare Clinic Console
+====================================================`;
+      const blob = new Blob([txt], { type: 'text/plain;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', `PulseCare_Receipt_${receipt.receiptId || 'REC'}.txt`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      this.showToast('Downloaded TXT payment receipt file!', 'success');
     });
   }
 

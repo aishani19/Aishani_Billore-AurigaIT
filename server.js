@@ -430,7 +430,7 @@ app.get('/api/stats', (req, res) => {
   db.get(`SELECT COUNT(*) as todayCount FROM appointments WHERE date = ? AND status != 'CANCELLED'`, [today], (err, row1) => {
     db.get(`SELECT COUNT(*) as lateCount FROM appointments WHERE status = 'CANCELLED' AND cancellation_fee > 0`, [], (err, row2) => {
       db.get(`SELECT SUM(cancellation_fee) as pendingSum FROM appointments WHERE status = 'CANCELLED' AND cancellation_fee_status = 'PENDING'`, [], (err, row3) => {
-        db.get(`SELECT SUM(amount) as collectedSum FROM payments WHERE status = 'SUCCESS'`, [], (err, row4) => {
+        db.get(`SELECT SUM(cancellation_fee) as collectedSum FROM appointments WHERE cancellation_fee_status = 'PAID'`, [], (err, row4) => {
           const todayBookings = row1 ? row1.todayCount : 0;
           const totalCapacity = 32; // 4 doctors * 8 slots/day
           const utilizationRate = Math.min(100, Math.round((todayBookings / totalCapacity) * 100));
