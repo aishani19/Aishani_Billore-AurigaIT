@@ -427,6 +427,76 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
   });
 });
 
+// --- AUTOMATIC 30-MIN LATE REASSIGNMENT & EARLY ARRIVAL HELPER ---
+function autoHandle30MinLate(currentDate, currentTime) {
+  return new Promise((resolve) => {
+    const clockMins = timeToMinutes(currentTime);
+    db.all(
+      `SELECT * FROM appointments WHERE date = ? AND status = 'BOOKED' ORDER BY start_time ASC`,
+      [currentDate],
+      async (err, apts) => {
+        if (err || !apts || apts.length === 0) return resolve({ bumpedCount: 0, reassignedCount: 0, logs: [] });
+        
+        let bumpedCount = 0;
+        let reassignedCount = 0;
+        let logs = [];
+
+        for (const apt of apts) {
+          const aptStartMins = timeToMinutes(apt.start_time);
+          if (clockMins >= aptStartMins + 30) {
+            bumpedCount++;
+            await new Promise(res => {
+              db.run(`UPDATE appointments SET status = 'BUMPED_LATE', arrival_status = 'LATE_30M_BUMPED' WHERE id = ?`, [apt.id], res);
+            });
+
+            const lateMsg = `Notice to ${apt.patient_name}: Your appointment with ${apt.doctor_name} at ${apt.start_time} was cancelled/bumped because you were 30+ minutes late. Please contact reception to reschedule.`;
+            await new Promise(res => {
+              db.run(
+                `INSERT INTO outbox (id, patient_id, patient_name, doctor_id, doctor_name, appointment_id, message, type) VALUES (?, ?, ?, ?, ?, ?, ?, 'LATE_30M_BUMPED')`,
+                ['out-' + Date.now() + '-' + Math.floor(Math.random() * 1000), apt.patient_id, apt.patient_name, apt.doctor_id, apt.doctor_name, apt.id, lateMsg],
+                res
+              );
+            });
+
+            // Find next upcoming BOOKED patient for same doctor and date
+            const nextApt = await new Promise(res => {
+              db.get(
+                `SELECT * FROM appointments WHERE doctor_id = ? AND date = ? AND status = 'BOOKED' AND start_time > ? ORDER BY start_time ASC LIMIT 1`,
+                [apt.doctor_id, currentDate, apt.start_time],
+                (e, row) => res(row)
+              );
+            });
+
+            if (nextApt) {
+              reassignedCount++;
+              const origTime = nextApt.start_time;
+              await new Promise(res => {
+                db.run(
+                  `UPDATE appointments SET start_time = ?, end_time = ?, arrival_status = 'REASSIGNED_EARLIER' WHERE id = ?`,
+                  [apt.start_time, apt.end_time, nextApt.id],
+                  res
+                );
+              });
+
+              const reassignMsg = `Info to ${nextApt.patient_name}: Your appointment with ${nextApt.doctor_name} has been moved up to an earlier slot at ${apt.start_time} (previously ${origTime}) because the prior patient was 30+ min late.`;
+              await new Promise(res => {
+                db.run(
+                  `INSERT INTO outbox (id, patient_id, patient_name, doctor_id, doctor_name, appointment_id, message, type) VALUES (?, ?, ?, ?, ?, ?, ?, 'SLOT_REASSIGNED_EARLIER')`,
+                  ['out-' + Date.now() + '-' + Math.floor(Math.random() * 1000), nextApt.patient_id, nextApt.patient_name, nextApt.doctor_id, nextApt.doctor_name, nextApt.id, reassignMsg],
+                  res
+                );
+              });
+
+              logs.push(`Reassigned ${nextApt.patient_name} to slot ${apt.start_time}`);
+            }
+          }
+        }
+        resolve({ bumpedCount, reassignedCount, logs });
+      }
+    );
+  });
+}
+
 // --- PATIENT ARRIVAL & LIVE TRACKING ENDPOINTS ---
 app.post('/api/appointments/:id/check-in', (req, res) => {
   const { id } = req.params;
@@ -439,8 +509,13 @@ app.post('/api/appointments/:id/check-in', (req, res) => {
     const arrivalMins = timeToMinutes(arrivalTime);
     const startMins = timeToMinutes(apt.start_time);
     const isLate = arrivalMins > startMins;
+    const isEarly = arrivalMins < startMins;
     const minutesLate = isLate ? (arrivalMins - startMins) : 0;
-    const arrivalStatus = isLate ? `LATE (${minutesLate}m late)` : 'ON_TIME';
+    const minutesEarly = isEarly ? (startMins - arrivalMins) : 0;
+    
+    let arrivalStatus = 'ON_TIME';
+    if (isLate) arrivalStatus = `LATE (${minutesLate}m late)`;
+    else if (isEarly) arrivalStatus = `EARLY (${minutesEarly}m early)`;
 
     db.run(
       `UPDATE appointments SET status = 'IN_PROGRESS', arrival_time = ?, arrival_status = ?, minutes_late = ? WHERE id = ?`,
@@ -453,7 +528,9 @@ app.post('/api/appointments/:id/check-in', (req, res) => {
           arrivalTime,
           arrivalStatus,
           minutesLate,
-          message: isLate ? `Patient arrived ${minutesLate} minutes late.` : 'Patient arrived on time.'
+          minutesEarly,
+          isEarly,
+          message: isEarly ? `Patient arrived ${minutesEarly} minutes early!` : (isLate ? `Patient arrived ${minutesLate} minutes late.` : 'Patient arrived on time.')
         });
       }
     );
@@ -462,10 +539,31 @@ app.post('/api/appointments/:id/check-in', (req, res) => {
 
 app.post('/api/appointments/:id/complete', (req, res) => {
   const { id } = req.params;
-  db.run(`UPDATE appointments SET status = 'COMPLETED' WHERE id = ?`, [id], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id, status: 'COMPLETED', message: 'Appointment marked as COMPLETED.' });
+  db.get(`SELECT * FROM appointments WHERE id = ?`, [id], (err, apt) => {
+    if (err || !apt) return res.status(404).json({ error: 'Appointment not found' });
+    
+    const isArrivedEarly = apt.arrival_status && (apt.arrival_status.startsWith('EARLY') || apt.arrival_status === 'ARRIVED_EARLY');
+    const newArrivalStatus = isArrivedEarly ? `ARRIVED_EARLY_COMPLETED` : (apt.arrival_status || 'ON_TIME');
+
+    db.run(`UPDATE appointments SET status = 'COMPLETED', arrival_status = ? WHERE id = ?`, [newArrivalStatus, id], function (err2) {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({
+        id,
+        status: 'COMPLETED',
+        arrivalStatus: newArrivalStatus,
+        isEarly: isArrivedEarly,
+        message: isArrivedEarly ? 'Arrived Early Appointment Completed!' : 'Appointment marked as COMPLETED.'
+      });
+    });
   });
+});
+
+app.post('/api/appointments/auto-handle-late', async (req, res) => {
+  const now = new Date();
+  const currentDate = req.body.date || now.toISOString().split('T')[0];
+  const currentTime = req.body.time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const result = await autoHandle30MinLate(currentDate, currentTime);
+  res.json({ success: true, ...result });
 });
 
 app.get('/api/patients/:id/history', (req, res) => {
@@ -477,7 +575,7 @@ app.get('/api/patients/:id/history', (req, res) => {
     const completed = rows.filter(r => r.status === 'COMPLETED' || r.status === 'IN_PROGRESS').length;
     const onTimeCount = rows.filter(r => r.arrival_status === 'ON_TIME').length;
     const lateCount = rows.filter(r => r.arrival_status && r.arrival_status.startsWith('LATE')).length;
-    const noShowCount = rows.filter(r => r.status === 'NO_SHOW').length;
+    const noShowCount = rows.filter(r => r.status === 'NO_SHOW' || r.status === 'BUMPED_LATE').length;
     const cancelledCount = rows.filter(r => r.status === 'CANCELLED').length;
 
     res.json({
@@ -508,11 +606,13 @@ app.get('/api/patients/:id/history', (req, res) => {
 });
 
 // --- LEVEL 2 (T1) & LEVEL 3 (T2): SYSTEM CLOCK TRIGGER & AUTOMATION ---
-app.post('/clock', (req, res) => {
+app.post('/clock', async (req, res) => {
   const now = new Date();
   const currentDate = req.body.date || now.toISOString().split('T')[0];
   const currentTime = req.body.time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const clockMins = timeToMinutes(currentTime);
+
+  const lateResult = await autoHandle30MinLate(currentDate, currentTime);
 
   db.all('SELECT * FROM appointments WHERE date = ? AND status != "CANCELLED"', [currentDate], (err, apts) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -529,13 +629,11 @@ app.post('/clock', (req, res) => {
     );
 
     apts.forEach(apt => {
-      // Level 2 (T1): Morning Reminder to /outbox
       const outboxId = 'out-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
       const msg = `Good morning ${apt.patient_name}, reminder for your appointment today with ${apt.doctor_name} at ${apt.start_time}.`;
       stmtOutbox.run(outboxId, apt.patient_id, apt.patient_name, apt.doctor_id, apt.doctor_name, apt.id, msg);
       remindersSent++;
 
-      // Level 3 (T2): Auto No-Show 30 min after start time if still BOOKED
       const aptStartMins = timeToMinutes(apt.start_time);
       if (apt.status === 'BOOKED' && clockMins >= (aptStartMins + 30)) {
         stmtNoShow.run(apt.id);
@@ -550,7 +648,8 @@ app.post('/clock', (req, res) => {
       success: true,
       clock: { date: currentDate, time: currentTime },
       morningRemindersSent: remindersSent,
-      noShowsAutoMarked: noShowsMarked
+      noShowsAutoMarked: noShowsMarked,
+      lateAutoHandled: lateResult
     });
   });
 });
@@ -619,6 +718,20 @@ app.get('/api/payments', (req, res) => {
 });
 
 
+
+// --- OUTBOX: Sent Patient Notifications Log ---
+app.get('/outbox', (req, res) => {
+  db.all('SELECT * FROM outbox ORDER BY created_at DESC LIMIT 100', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
+});
+app.get('/api/outbox', (req, res) => {
+  db.all('SELECT * FROM outbox ORDER BY created_at DESC LIMIT 100', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
+});
 
 // --- DASHBOARD STATS ENDPOINT ---
 app.get('/api/stats', (req, res) => {

@@ -316,9 +316,25 @@ class ClinicApp {
       this.renderScheduleView();
     });
 
-    document.getElementById('doctor-filter').addEventListener('change', (e) => {
+    document.getElementById('doctor-filter')?.addEventListener('change', (e) => {
       this.selectedDoctorFilter = e.target.value;
       this.renderScheduleView();
+    });
+
+    document.getElementById('btn-auto-late-check')?.addEventListener('click', () => {
+      this.handleAutoLateCheck();
+    });
+
+    document.getElementById('btn-view-outbox')?.addEventListener('click', () => {
+      this.openOutboxModal();
+    });
+
+    document.getElementById('btn-close-outbox-modal')?.addEventListener('click', () => {
+      document.getElementById('modal-outbox')?.classList.add('hidden');
+    });
+
+    document.getElementById('btn-done-outbox')?.addEventListener('click', () => {
+      document.getElementById('modal-outbox')?.classList.add('hidden');
     });
 
     const bookDate = document.getElementById('book-date');
@@ -328,6 +344,57 @@ class ClinicApp {
     }
     const rDate = document.getElementById('reschedule-date');
     if (rDate) rDate.min = todayStr;
+  }
+
+  async openOutboxModal() {
+    const modal = document.getElementById('modal-outbox');
+    const list = document.getElementById('outbox-list');
+    if (!modal || !list) return;
+    list.innerHTML = '<div style="padding:1.5rem; text-align:center; color:var(--text-muted);">Loading outbox notifications...</div>';
+    modal.classList.remove('hidden');
+
+    const outbox = await this.apiRequest('/outbox');
+    if (!outbox || outbox.length === 0) {
+      list.innerHTML = '<div class="empty-state" style="padding:2rem;"><small>No sent notifications recorded yet.</small></div>';
+      return;
+    }
+
+    list.innerHTML = outbox.map(item => {
+      let badgeColor = '#0284c7';
+      let icon = '📩';
+      if (item.type === 'LATE_30M_BUMPED') { badgeColor = '#e11d48'; icon = '🚨'; }
+      else if (item.type === 'SLOT_REASSIGNED_EARLIER') { badgeColor = '#059669'; icon = '🔄'; }
+
+      return `
+        <div style="background:var(--bg-card); padding:0.85rem 1.1rem; border-radius:var(--radius-md); border:1px solid var(--border-color); box-shadow:var(--shadow-sm); display:flex; flex-direction:column; gap:0.35rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="badge" style="background:${badgeColor}; color:#fff; font-size:0.72rem; font-weight:700;">${icon} ${item.type}</span>
+            <small style="color:var(--text-muted); font-size:0.75rem; font-weight:600;">${new Date(item.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>
+          </div>
+          <p style="font-size:0.9rem; font-weight:700; color:var(--text-dark); margin:0.2rem 0;">${item.message}</p>
+          <small style="color:var(--text-light); font-size:0.78rem;">Patient: <strong>${item.patient_name}</strong> | Doctor: <strong>${item.doctor_name}</strong></small>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async handleAutoLateCheck() {
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const res = await this.apiRequest('/api/appointments/auto-handle-late', 'POST', {
+      date: this.selectedDate,
+      time: currentTime
+    });
+
+    if (res && res.success) {
+      if (res.bumpedCount > 0) {
+        this.showToast(`🚨 ${res.bumpedCount} patient(s) 30m late were bumped & ${res.reassignedCount} next patient(s) reassigned to earlier slot! Outbox info sent.`, 'error');
+      } else {
+        this.showToast('✅ Auto-Check Done: No 30m late appointments found at this time.', 'success');
+      }
+      await this.renderScheduleView();
+      await this.updateStatsBar();
+    }
   }
 
   async populateDropdowns() {
@@ -390,23 +457,41 @@ class ClinicApp {
         docApts.forEach(apt => {
           const card = document.createElement('div');
           const isCancelled = apt.status === 'CANCELLED';
-          card.className = `slot-card ${isCancelled ? 'cancelled' : 'booked'}`;
+          const isBumped = apt.status === 'BUMPED_LATE';
+          const isArrivedEarly = apt.arrivalStatus && (apt.arrivalStatus.includes('EARLY') || apt.arrivalStatus === 'ARRIVED_EARLY_COMPLETED');
+          const isReassigned = apt.arrivalStatus === 'REASSIGNED_EARLIER';
+          let cardClass = 'booked';
+          if (isCancelled) cardClass = 'cancelled';
+          else if (isBumped) cardClass = 'bumped';
+          else if (apt.status === 'COMPLETED' && isArrivedEarly) cardClass = 'early-completed';
+          else if (isReassigned) cardClass = 'reassigned';
+          card.className = `slot-card ${cardClass}`;
+
           let statusBadge = '';
           if (isCancelled) {
             statusBadge = `<span class="badge badge-cancelled">CANCELLED ${apt.cancellationFee > 0 ? `(₹${apt.cancellationFee} Late Fee)` : ''}</span>`;
+          } else if (isBumped) {
+            statusBadge = `<span class="badge" style="background:#e11d48; color:#fff; font-weight:800;">🚨 BUMPED (30m LATE)</span>`;
           } else if (apt.status === 'IN_PROGRESS') {
-            statusBadge = `<span class="badge" style="background:#0284c7; color:#fff;">🟢 IN CONSULTATION</span>`;
+            statusBadge = isArrivedEarly 
+              ? `<span class="badge" style="background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%); color:#fff; font-weight:800;">⚡ IN CONSULTATION (Arrived Early)</span>`
+              : `<span class="badge" style="background:#0284c7; color:#fff;">🟢 IN CONSULTATION</span>`;
           } else if (apt.status === 'COMPLETED') {
-            statusBadge = `<span class="badge" style="background:#059669; color:#fff;">✅ COMPLETED</span>`;
+            statusBadge = isArrivedEarly 
+              ? `<span class="badge" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; font-weight:800; padding:0.3rem 0.6rem; border-radius:6px; box-shadow:0 2px 8px rgba(16,185,129,0.35);">✨ ARRIVED EARLY • COMPLETED</span>`
+              : `<span class="badge" style="background:#059669; color:#fff;">✅ COMPLETED</span>`;
           } else if (apt.status === 'NO_SHOW') {
             statusBadge = `<span class="badge" style="background:#dc2626; color:#fff;">⚠️ NO SHOW</span>`;
           }
 
           let arrivalTag = '';
-          if (apt.arrivalTime) {
+          if (isBumped) {
+            arrivalTag = `<div style="font-size:0.75rem; font-weight:700; margin-top:0.25rem; color:#e11d48;">⚠️ 30+ min late. Appointment cancelled & slot re-assigned to next patient. Info sent to patient.</div>`;
+          } else if (apt.arrivalTime) {
             const isLate = apt.arrivalStatus && apt.arrivalStatus.startsWith('LATE');
+            const earlyMinsText = isArrivedEarly ? `⚡ Arrived Early (${apt.arrivalTime})` : `✅ Arrived On Time (${apt.arrivalTime})`;
             arrivalTag = `<div style="font-size:0.75rem; font-weight:700; margin-top:0.25rem; color:${isLate ? '#dc2626' : '#059669'};">
-              ${isLate ? `⏱️ Arrived ${apt.minutesLate || 0}m Late (${apt.arrivalTime})` : `✅ Arrived On Time (${apt.arrivalTime})`}
+              ${isLate ? `⏱️ Arrived ${apt.minutesLate || 0}m Late (${apt.arrivalTime})` : earlyMinsText}
             </div>`;
           } else if (apt.status === 'NO_SHOW') {
             arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:#dc2626;">
@@ -418,8 +503,12 @@ class ClinicApp {
             </div>`;
           } else {
             arrivalTag = `<div style="font-size:0.75rem; font-weight:600; margin-top:0.25rem; color:#0284c7;">
-              ⏳ Awaiting Patient Arrival (Scheduled: ${apt.startTime})
+              ⏳ Awaiting Arrival (Scheduled: ${apt.startTime})
             </div>`;
+          }
+
+          if (apt.arrivalStatus === 'REASSIGNED_EARLIER') {
+            arrivalTag += `<div style="font-size:0.75rem; font-weight:800; margin-top:0.25rem; color:#0284c7; background:rgba(2,132,199,0.08); padding:0.2rem 0.4rem; border-radius:4px; display:inline-block;">🔄 Moved up to earlier slot (Prior patient 30m late). Info sent.</div>`;
           }
 
           card.innerHTML = `
@@ -428,7 +517,7 @@ class ClinicApp {
             <div class="slot-reason">${apt.reason || 'General Consultation'}</div>
             ${statusBadge ? `<div style="margin-top:0.3rem;">${statusBadge}</div>` : ''}
             ${arrivalTag}
-            ${!isCancelled && apt.status !== 'COMPLETED' ? `
+            ${!isCancelled && !isBumped && apt.status !== 'COMPLETED' ? `
               <div class="slot-actions" style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.25rem;">
                 ${apt.status === 'BOOKED' ? `<button class="btn btn-sm btn-primary btn-checkin-apt" data-id="${apt.id}">📍 Mark Arrived</button>` : ''}
                 ${apt.status === 'IN_PROGRESS' ? `<button class="btn btn-sm btn-success btn-complete-apt" data-id="${apt.id}" style="background:#059669; color:#fff;">✅ Complete Visit</button>` : ''}
@@ -438,11 +527,14 @@ class ClinicApp {
             ` : ''}
           `;
 
-          if (!isCancelled) {
+          if (!isCancelled && !isBumped) {
             card.querySelector('.btn-checkin-apt')?.addEventListener('click', async () => {
               const res = await this.apiRequest(`/api/appointments/${apt.id}/check-in`, 'POST');
               if (res && !res.error) {
-                this.showToast(`📍 Patient Checked In! ${res.message}`, res.minutesLate > 0 ? 'error' : 'success');
+                const toastMsg = res.isEarly 
+                  ? `⚡ Arrived Early (${res.minutesEarly}m early)! Patient checked in.` 
+                  : `📍 Patient Checked In! ${res.message}`;
+                this.showToast(toastMsg, res.minutesLate > 0 ? 'error' : 'success');
                 await this.renderScheduleView();
                 await this.updateStatsBar();
               }
@@ -451,7 +543,10 @@ class ClinicApp {
             card.querySelector('.btn-complete-apt')?.addEventListener('click', async () => {
               const res = await this.apiRequest(`/api/appointments/${apt.id}/complete`, 'POST');
               if (res && !res.error) {
-                this.showToast('✅ Consultation completed successfully!', 'success');
+                const toastMsg = res.isEarly 
+                  ? '✨ Arrived Early • Appointment Completed!' 
+                  : '✅ Consultation completed successfully!';
+                this.showToast(toastMsg, 'success');
                 await this.renderScheduleView();
                 await this.updateStatsBar();
               }

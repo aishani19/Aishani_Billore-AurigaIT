@@ -265,6 +265,8 @@
             <select id="doctor-filter" class="form-control">
               <option value="ALL">All Doctors</option>
             </select>
+            <button class="btn btn-outline" id="btn-auto-late-check" style="background:rgba(225,29,72,0.08); border-color:#f43f5e; color:#e11d48; font-weight:700;">⚡ Check 30m Late &amp; Reassign</button>
+            <button class="btn btn-outline" id="btn-view-outbox" style="background:rgba(2,132,199,0.08); border-color:#38bdf8; color:#0284c7; font-weight:700;">📬 Patient Info Log (/outbox)</button>
           </div>
         </div>
 
@@ -659,6 +661,24 @@
           <button type="submit" class="btn btn-primary" id="btn-confirm-reschedule">Save Reschedule</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="modal-outbox" class="modal-backdrop hidden">
+    <div class="modal-card" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3>📬 Sent Patient Info Log (Outbox Notifications)</h3>
+        <button class="modal-close" id="btn-close-outbox-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">Real-time automated SMS/App notification log for 30m late cancellations, slot reassignments, and morning reminders.</p>
+        <div id="outbox-list" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:0.5rem;">
+          <!-- Outbox entries rendered dynamically -->
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btn-done-outbox">Close</button>
+      </div>
     </div>
   </div>
 
